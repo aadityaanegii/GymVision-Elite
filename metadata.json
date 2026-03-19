@@ -1,0 +1,5 @@
+{
+  "name": "GymVision Elite",
+  "description": "AI-powered fitness platform with real-time form correction, running tracking, and personalized nutrition.",
+  "requestFramePermissions": ["camera", "geolocation"]
+}

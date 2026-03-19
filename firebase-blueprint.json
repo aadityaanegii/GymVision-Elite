@@ -1,0 +1,118 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "role": { "type": "string", "enum": ["user", "admin"] },
+        "height": { "type": "number" },
+        "weight": { "type": "number" },
+        "goal": { "type": "string", "enum": ["fat_loss", "muscle_gain", "strength", "maintenance"] },
+        "onboardingCompleted": { "type": "boolean" },
+        "age": { "type": "number" },
+        "experience_level": { "type": "string", "enum": ["beginner", "intermediate", "advanced"] },
+        "days_per_week": { "type": "number" },
+        "available_time_per_session": { "type": "number" },
+        "equipment": { "type": "string", "enum": ["home", "gym", "mixed"] },
+        "injuries": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role", "createdAt"]
+    },
+    "WorkoutPlan": {
+      "title": "WorkoutPlan",
+      "description": "A generated workout plan for a user",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "goal": { "type": "string" },
+        "exercises": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "exercises", "createdAt"]
+    },
+    "WorkoutSession": {
+      "title": "WorkoutSession",
+      "description": "A recorded workout session with form analysis",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "planId": { "type": "string" },
+        "exerciseName": { "type": "string" },
+        "reps": { "type": "number" },
+        "formScore": { "type": "number" },
+        "durationSeconds": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "exerciseName", "reps", "createdAt"]
+    },
+    "RunSession": {
+      "title": "RunSession",
+      "description": "A recorded running session with GPS data",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "distanceKm": { "type": "number" },
+        "durationSeconds": { "type": "number" },
+        "paceMinKm": { "type": "number" },
+        "routeCoordinates": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "distanceKm", "durationSeconds", "createdAt"]
+    },
+    "NutritionPlan": {
+      "title": "NutritionPlan",
+      "description": "A generated nutrition plan",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "dailyCalories": { "type": "number" },
+        "proteinGrams": { "type": "number" },
+        "carbsGrams": { "type": "number" },
+        "fatsGrams": { "type": "number" },
+        "meals": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "dailyCalories", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profiles"
+    },
+    "/workoutPlans/{planId}": {
+      "schema": { "$ref": "#/entities/WorkoutPlan" },
+      "description": "Generated workout plans"
+    },
+    "/workoutSessions/{sessionId}": {
+      "schema": { "$ref": "#/entities/WorkoutSession" },
+      "description": "Recorded workout sessions"
+    },
+    "/runSessions/{sessionId}": {
+      "schema": { "$ref": "#/entities/RunSession" },
+      "description": "Recorded running sessions"
+    },
+    "/nutritionPlans/{planId}": {
+      "schema": { "$ref": "#/entities/NutritionPlan" },
+      "description": "Generated nutrition plans"
+    }
+  }
+}

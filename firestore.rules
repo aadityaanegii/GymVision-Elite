@@ -1,0 +1,234 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId}
+    // Fields:
+    //   - uid: string (required) - Firebase Auth UID
+    //   - email: string (required) - User email
+    //   - displayName: string (optional) - User name
+    //   - photoURL: string (optional) - Profile picture URL
+    //   - role: string (required) - 'user' or 'admin'
+    //   - heightCm: number (optional) - Height in cm
+    //   - weightKg: number (optional) - Weight in kg
+    //   - goal: string (optional) - Fitness goal
+    //   - createdAt: timestamp (required) - Creation time
+    //   - updatedAt: timestamp (optional) - Last update time
+    //
+    // Collection: workoutPlans
+    // Document ID: {planId}
+    // Fields:
+    //   - userId: string (required) - Owner UID
+    //   - title: string (required) - Plan title
+    //   - description: string (optional) - Plan description
+    //   - goal: string (optional) - Goal of the plan
+    //   - exercises: list (required) - List of exercises
+    //   - createdAt: timestamp (required) - Creation time
+    //
+    // Collection: workoutSessions
+    // Document ID: {sessionId}
+    // Fields:
+    //   - userId: string (required) - Owner UID
+    //   - planId: string (optional) - Associated plan ID
+    //   - exerciseName: string (required) - Name of exercise
+    //   - reps: number (required) - Number of reps
+    //   - formScore: number (optional) - Form score 0-100
+    //   - durationSeconds: number (optional) - Duration in seconds
+    //   - createdAt: timestamp (required) - Creation time
+    //
+    // Collection: runSessions
+    // Document ID: {sessionId}
+    // Fields:
+    //   - userId: string (required) - Owner UID
+    //   - distanceKm: number (required) - Distance in km
+    //   - durationSeconds: number (required) - Duration in seconds
+    //   - paceMinKm: number (optional) - Pace in min/km
+    //   - routeCoordinates: list (optional) - List of coordinates
+    //   - createdAt: timestamp (required) - Creation time
+    //
+    // Collection: nutritionPlans
+    // Document ID: {planId}
+    // Fields:
+    //   - userId: string (required) - Owner UID
+    //   - dailyCalories: number (required) - Daily calorie target
+    //   - proteinGrams: number (optional) - Protein target
+    //   - carbsGrams: number (optional) - Carbs target
+    //   - fatsGrams: number (optional) - Fats target
+    //   - meals: list (optional) - List of meals
+    //   - createdAt: timestamp (required) - Creation time
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "negiaditya1244@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function uidUnchanged() {
+      return !('uid' in request.resource.data) || request.resource.data.uid == request.auth.uid;
+    }
+
+    function uidNotModified() {
+      return !('uid' in request.resource.data) || request.resource.data.uid == resource.data.uid;
+    }
+
+    function userIdUnchanged() {
+      return !('userId' in request.resource.data) || request.resource.data.userId == request.auth.uid;
+    }
+
+    function userIdNotModified() {
+      return !('userId' in request.resource.data) || request.resource.data.userId == resource.data.userId;
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser() {
+      let data = request.resource.data;
+      return hasRequiredFields(['uid', 'email', 'role', 'createdAt']) &&
+             hasOnlyAllowedFields(['uid', 'email', 'displayName', 'photoURL', 'role', 'height', 'weight', 'goal', 'createdAt', 'updatedAt', 'onboardingCompleted', 'age', 'experience_level', 'days_per_week', 'available_time_per_session', 'equipment', 'injuries']) &&
+             data.uid is string && data.uid.size() > 0 && data.uid.size() < 100 &&
+             data.email is string && isValidEmail(data.email) && data.email.size() < 150 &&
+             (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 100)) &&
+             (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 1000)) &&
+             data.role in ['user', 'admin'] &&
+             (!('height' in data) || (data.height is number && data.height > 0 && data.height < 300)) &&
+             (!('weight' in data) || (data.weight is number && data.weight > 0 && data.weight < 500)) &&
+             (!('goal' in data) || (data.goal in ['fat_loss', 'muscle_gain', 'strength', 'maintenance'])) &&
+             (!('onboardingCompleted' in data) || data.onboardingCompleted is bool) &&
+             (!('age' in data) || (data.age is number && data.age > 0 && data.age < 150)) &&
+             (!('experience_level' in data) || (data.experience_level in ['beginner', 'intermediate', 'advanced'])) &&
+             (!('days_per_week' in data) || (data.days_per_week is number && data.days_per_week > 0 && data.days_per_week <= 7)) &&
+             (!('available_time_per_session' in data) || (data.available_time_per_session is number && data.available_time_per_session > 0 && data.available_time_per_session <= 1440)) &&
+             (!('equipment' in data) || (data.equipment in ['home', 'gym', 'mixed'])) &&
+             (!('injuries' in data) || (data.injuries is string && data.injuries.size() <= 1000)) &&
+             data.createdAt is timestamp &&
+             (!('updatedAt' in data) || data.updatedAt is timestamp);
+    }
+
+    function isValidWorkoutPlan() {
+      let data = request.resource.data;
+      return hasRequiredFields(['userId', 'title', 'exercises', 'createdAt']) &&
+             hasOnlyAllowedFields(['userId', 'title', 'description', 'goal', 'exercises', 'createdAt']) &&
+             data.userId is string && data.userId.size() > 0 && data.userId.size() < 100 &&
+             data.title is string && data.title.size() > 0 && data.title.size() <= 150 &&
+             (!('description' in data) || (data.description is string && data.description.size() <= 2000)) &&
+             (!('goal' in data) || (data.goal is string && data.goal.size() <= 100)) &&
+             data.exercises is list && data.exercises.size() <= 100 &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidWorkoutSession() {
+      let data = request.resource.data;
+      return hasRequiredFields(['userId', 'exerciseName', 'reps', 'createdAt']) &&
+             hasOnlyAllowedFields(['userId', 'planId', 'exerciseName', 'reps', 'formScore', 'durationSeconds', 'createdAt']) &&
+             data.userId is string && data.userId.size() > 0 && data.userId.size() < 100 &&
+             (!('planId' in data) || (data.planId is string && data.planId.size() <= 100)) &&
+             data.exerciseName is string && data.exerciseName.size() > 0 && data.exerciseName.size() <= 150 &&
+             data.reps is number && data.reps >= 0 && data.reps <= 10000 &&
+             (!('formScore' in data) || (data.formScore is number && data.formScore >= 0 && data.formScore <= 100)) &&
+             (!('durationSeconds' in data) || (data.durationSeconds is number && data.durationSeconds >= 0 && data.durationSeconds <= 86400)) &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidRunSession() {
+      let data = request.resource.data;
+      return hasRequiredFields(['userId', 'distanceKm', 'durationSeconds', 'createdAt']) &&
+             hasOnlyAllowedFields(['userId', 'distanceKm', 'durationSeconds', 'paceMinKm', 'routeCoordinates', 'createdAt']) &&
+             data.userId is string && data.userId.size() > 0 && data.userId.size() < 100 &&
+             data.distanceKm is number && data.distanceKm >= 0 && data.distanceKm <= 1000 &&
+             data.durationSeconds is number && data.durationSeconds >= 0 && data.durationSeconds <= 86400 &&
+             (!('paceMinKm' in data) || (data.paceMinKm is number && data.paceMinKm >= 0 && data.paceMinKm <= 1000)) &&
+             (!('routeCoordinates' in data) || (data.routeCoordinates is list && data.routeCoordinates.size() <= 5000)) &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidNutritionPlan() {
+      let data = request.resource.data;
+      return hasRequiredFields(['userId', 'dailyCalories', 'createdAt']) &&
+             hasOnlyAllowedFields(['userId', 'dailyCalories', 'proteinGrams', 'carbsGrams', 'fatsGrams', 'meals', 'createdAt']) &&
+             data.userId is string && data.userId.size() > 0 && data.userId.size() < 100 &&
+             data.dailyCalories is number && data.dailyCalories >= 0 && data.dailyCalories <= 20000 &&
+             (!('proteinGrams' in data) || (data.proteinGrams is number && data.proteinGrams >= 0 && data.proteinGrams <= 1000)) &&
+             (!('carbsGrams' in data) || (data.carbsGrams is number && data.carbsGrams >= 0 && data.carbsGrams <= 2000)) &&
+             (!('fatsGrams' in data) || (data.fatsGrams is number && data.fatsGrams >= 0 && data.fatsGrams <= 1000)) &&
+             (!('meals' in data) || (data.meals is list && data.meals.size() <= 20)) &&
+             data.createdAt is timestamp;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isAuthenticated() && isValidUser() && uidUnchanged() && ((isOwner(userId) && request.resource.data.role == 'user') || isAdmin());
+      allow update: if isAuthenticated() && isValidUser() && uidNotModified() && ((isOwner(userId) && request.resource.data.role == resource.data.role && request.resource.data.createdAt == resource.data.createdAt) || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    match /workoutPlans/{planId} {
+      allow read: if isDocOwner() || isAdmin();
+      allow create: if isAuthenticated() && isValidWorkoutPlan() && userIdUnchanged();
+      allow update: if isAuthenticated() && isValidWorkoutPlan() && userIdNotModified() && isDocOwner() && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isDocOwner() || isAdmin();
+    }
+
+    match /workoutSessions/{sessionId} {
+      allow read: if isDocOwner() || isAdmin();
+      allow create: if isAuthenticated() && isValidWorkoutSession() && userIdUnchanged();
+      allow update: if isAuthenticated() && isValidWorkoutSession() && userIdNotModified() && isDocOwner() && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isDocOwner() || isAdmin();
+    }
+
+    match /runSessions/{sessionId} {
+      allow read: if isDocOwner() || isAdmin();
+      allow create: if isAuthenticated() && isValidRunSession() && userIdUnchanged();
+      allow update: if isAuthenticated() && isValidRunSession() && userIdNotModified() && isDocOwner() && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isDocOwner() || isAdmin();
+    }
+
+    match /nutritionPlans/{planId} {
+      allow read: if isDocOwner() || isAdmin();
+      allow create: if isAuthenticated() && isValidNutritionPlan() && userIdUnchanged();
+      allow update: if isAuthenticated() && isValidNutritionPlan() && userIdNotModified() && isDocOwner() && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isDocOwner() || isAdmin();
+    }
+  }
+}
