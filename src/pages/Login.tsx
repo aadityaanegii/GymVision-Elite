@@ -39,7 +39,7 @@ export const Login = () => {
         <div className="w-16 h-16 bg-indigo-600/20 text-indigo-500 rounded-2xl flex items-center justify-center mx-auto mb-6">
           <Activity size={32} />
         </div>
-        <h1 className="text-3xl font-bold text-white mb-2">GymVision Elite</h1>
+        <h1 className="text-3xl font-bold text-white mb-2">Dreamism Elite</h1>
         <p className="text-zinc-400 mb-8">Your AI-powered personal trainer and fitness platform. Developed by Aditya.</p>
         
         {error && (

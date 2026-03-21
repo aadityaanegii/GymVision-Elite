@@ -76,7 +76,7 @@ export const Layout = () => {
       >
         <div className="p-6 flex items-center justify-between">
           <h1 className="text-xl font-bold bg-gradient-to-r from-indigo-400 to-cyan-400 bg-clip-text text-transparent">
-            GymVision Elite
+            Dreamism Elite
           </h1>
           <button onClick={toggleSidebar} className="lg:hidden text-zinc-400 hover:text-white">
             <X size={24} />
@@ -170,13 +170,13 @@ export const Layout = () => {
           <button onClick={toggleSidebar} className="text-zinc-400 hover:text-white">
             <Menu size={24} />
           </button>
-          <span className="ml-4 font-bold text-lg">GymVision Elite</span>
+          <span className="ml-4 font-bold text-lg">Dreamism Elite</span>
         </header>
         <div className="flex-1 overflow-auto p-4 lg:p-8">
           <Outlet />
         </div>
         <footer className="py-4 text-center text-xs text-zinc-600 border-t border-zinc-800">
-          GymVision Elite • Developed by Aditya
+          Dreamism Elite • Developed by Aditya
         </footer>
       </main>
     </div>
