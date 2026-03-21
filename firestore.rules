@@ -124,9 +124,9 @@ service cloud.firestore {
       return hasRequiredFields(['uid', 'email', 'role', 'createdAt']) &&
              hasOnlyAllowedFields(['uid', 'email', 'displayName', 'photoURL', 'role', 'height', 'weight', 'goal', 'createdAt', 'updatedAt', 'onboardingCompleted', 'age', 'experience_level', 'days_per_week', 'available_time_per_session', 'equipment', 'injuries']) &&
              data.uid is string && data.uid.size() > 0 && data.uid.size() < 100 &&
-             data.email is string && isValidEmail(data.email) && data.email.size() < 150 &&
-             (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 100)) &&
-             (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 1000)) &&
+             data.email is string && isValidEmail(data.email) && data.email.size() < 250 &&
+             (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 200)) &&
+             (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 2000)) &&
              data.role in ['user', 'admin'] &&
              (!('height' in data) || (data.height is number && data.height > 0 && data.height < 300)) &&
              (!('weight' in data) || (data.weight is number && data.weight > 0 && data.weight < 500)) &&
@@ -181,14 +181,19 @@ service cloud.firestore {
 
     function isValidNutritionPlan() {
       let data = request.resource.data;
-      return hasRequiredFields(['userId', 'dailyCalories', 'createdAt']) &&
-             hasOnlyAllowedFields(['userId', 'dailyCalories', 'proteinGrams', 'carbsGrams', 'fatsGrams', 'meals', 'createdAt']) &&
+      return hasRequiredFields(['userId', 'createdAt']) &&
+             hasOnlyAllowedFields(['userId', 'title', 'description', 'goal', 'dailyCalories', 'calories', 'proteinGrams', 'carbsGrams', 'fatsGrams', 'meals', 'lastUpdatedDate', 'createdAt']) &&
              data.userId is string && data.userId.size() > 0 && data.userId.size() < 100 &&
-             data.dailyCalories is number && data.dailyCalories >= 0 && data.dailyCalories <= 20000 &&
-             (!('proteinGrams' in data) || (data.proteinGrams is number && data.proteinGrams >= 0 && data.proteinGrams <= 1000)) &&
-             (!('carbsGrams' in data) || (data.carbsGrams is number && data.carbsGrams >= 0 && data.carbsGrams <= 2000)) &&
-             (!('fatsGrams' in data) || (data.fatsGrams is number && data.fatsGrams >= 0 && data.fatsGrams <= 1000)) &&
-             (!('meals' in data) || (data.meals is list && data.meals.size() <= 20)) &&
+             (!('title' in data) || data.title is string) &&
+             (!('description' in data) || data.description is string) &&
+             (!('goal' in data) || data.goal is string) &&
+             (!('dailyCalories' in data) || data.dailyCalories is number || data.dailyCalories is string) &&
+             (!('calories' in data) || data.calories is number || data.calories is string) &&
+             (!('proteinGrams' in data) || data.proteinGrams is number || data.proteinGrams is string) &&
+             (!('carbsGrams' in data) || data.carbsGrams is number || data.carbsGrams is string) &&
+             (!('fatsGrams' in data) || data.fatsGrams is number || data.fatsGrams is string) &&
+             (!('meals' in data) || data.meals is list) &&
+             (!('lastUpdatedDate' in data) || data.lastUpdatedDate is string) &&
              data.createdAt is timestamp;
     }
 

@@ -66,9 +66,12 @@ export const generateNutritionPlan = async (goal: string, weightKg: number, heig
               properties: {
                 name: { type: Type.STRING },
                 description: { type: Type.STRING },
-                calories: { type: Type.NUMBER }
+                calories: { type: Type.NUMBER },
+                protein: { type: Type.NUMBER },
+                carbs: { type: Type.NUMBER },
+                fats: { type: Type.NUMBER }
               },
-              required: ["name", "description", "calories"]
+              required: ["name", "description", "calories", "protein", "carbs", "fats"]
             }
           }
         },

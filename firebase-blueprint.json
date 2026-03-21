@@ -88,6 +88,7 @@
           "type": "array",
           "items": { "type": "object" }
         },
+        "lastUpdatedDate": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["userId", "dailyCalories", "createdAt"]

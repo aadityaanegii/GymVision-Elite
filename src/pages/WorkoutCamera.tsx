@@ -5,7 +5,7 @@ import { drawConnectors, drawLandmarks } from '@mediapipe/drawing_utils';
 import { RepCounter } from '../lib/poseUtils';
 import { EXERCISES } from '../lib/exercises';
 import { useAuth } from '../contexts/AuthContext';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, where, getDocs, orderBy, limit, updateDoc, doc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { Camera, Save, RefreshCw } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -129,15 +129,54 @@ export const WorkoutCamera = () => {
   const saveWorkout = async () => {
     if (!user || reps === 0) return;
     try {
-      await addDoc(collection(db, 'workoutSessions'), {
+      const finalScore = counterRef.current?.getAverageScore() || score;
+      const exerciseConfig = EXERCISES.find(e => e.id === exercise);
+      const exerciseName = exerciseConfig ? exerciseConfig.name : exercise;
+
+      const sessionData = {
         userId: user.uid,
-        exerciseName: exercise,
+        exerciseName: exerciseName,
         reps,
-        formScore: counterRef.current?.getAverageScore() || score,
+        formScore: finalScore,
         durationSeconds: duration,
         createdAt: serverTimestamp()
-      });
-      alert('Workout saved successfully!');
+      };
+      const docRef = await addDoc(collection(db, 'workoutSessions'), sessionData);
+
+      // Check for active workout plan and mark as done
+      const qPlan = query(
+        collection(db, 'workoutPlans'),
+        where('userId', '==', user.uid),
+        orderBy('createdAt', 'desc'),
+        limit(1)
+      );
+      const planSnap = await getDocs(qPlan);
+      
+      let planUpdated = false;
+      if (!planSnap.empty) {
+        const activePlan = { id: planSnap.docs[0].id, ...planSnap.docs[0].data() } as any;
+        let matchedOnce = false;
+        const newExercises = activePlan.exercises.map((ex: any) => {
+          // Match by name (case insensitive, partial match)
+          if (!matchedOnce && !ex.completed && (ex.name.toLowerCase().includes(exerciseName.toLowerCase()) || exerciseName.toLowerCase().includes(ex.name.toLowerCase()))) {
+            planUpdated = true;
+            matchedOnce = true;
+            return { ...ex, completed: true, sessionId: docRef.id, formScore: finalScore };
+          }
+          return ex;
+        });
+        
+        if (planUpdated) {
+          await updateDoc(doc(db, 'workoutPlans', activePlan.id), { exercises: newExercises });
+        }
+      }
+
+      if (planUpdated) {
+        alert(`Workout saved and marked as completed in your plan! Score: ${finalScore}`);
+      } else {
+        alert(`Workout saved successfully! Score: ${finalScore}`);
+      }
+
       setReps(0);
       setDuration(0);
     } catch (error) {

@@ -1,102 +1,73 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { EXERCISES } from '../lib/exercises';
-import { motion } from 'motion/react';
-import { Calendar, Clock, Dumbbell, AlertCircle, CheckCircle2, ChevronRight, Target } from 'lucide-react';
+import { collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
+import { db, handleFirestoreError, OperationType } from '../firebase';
+import { motion, AnimatePresence } from 'motion/react';
+import { Calendar, Clock, Dumbbell, AlertCircle, Target, Play, ChevronDown } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 export const WorkoutCycles = () => {
-  const { userProfile } = useAuth();
+  const { user, userProfile } = useAuth();
+  const navigate = useNavigate();
   const [plan, setPlan] = useState<any[]>([]);
+  const [expandedDay, setExpandedDay] = useState<number | null>(0);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!userProfile) return;
+    if (!user || !userProfile) return;
 
-    // Generate personalized workout plan based on profile
-    const generatePlan = () => {
-      const { goal, experience_level, days_per_week, equipment, injuries } = userProfile;
-      
-      // Filter exercises based on injuries
-      let availableExercises = EXERCISES.filter(ex => {
-        if (injuries && injuries !== 'none' && ex.category.toLowerCase().includes(injuries.toLowerCase())) return false;
-        return true;
-      });
-
-      // Adjust intensity/volume based on experience and goal
-      let sets = 3;
-      let reps = 10;
-      let rest = 60;
-
-      if (experience_level === 'beginner') {
-        sets = 2;
-        reps = 12;
-        rest = 90;
-      } else if (experience_level === 'advanced') {
-        sets = 4;
-        reps = 8;
-        rest = 45;
-      }
-
-      if (goal === 'strength') {
-        reps = 5;
-        sets = 5;
-        rest = 120;
-      } else if (goal === 'fat_loss') {
-        reps = 15;
-        rest = 30;
-      }
-
-      // Create a weekly cycle
-      const cycle = [];
-      const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-      
-      // Simple split logic based on days_per_week
-      const splits = {
-        1: ['Full Body'],
-        2: ['Upper Body', 'Lower Body'],
-        3: ['Push', 'Pull', 'Legs'],
-        4: ['Upper Body', 'Lower Body', 'Upper Body', 'Lower Body'],
-        5: ['Chest', 'Back', 'Legs', 'Shoulders', 'Arms'],
-        6: ['Push', 'Pull', 'Legs', 'Push', 'Pull', 'Legs'],
-        7: ['Full Body', 'Active Recovery', 'Full Body', 'Active Recovery', 'Full Body', 'Active Recovery', 'Full Body']
-      };
-
-      const currentSplit = splits[days_per_week as keyof typeof splits] || splits[3];
-
-      for (let i = 0; i < days_per_week; i++) {
-        const dayFocus = currentSplit[i % currentSplit.length];
+    const fetchActivePlan = async () => {
+      try {
+        const qPlan = query(
+          collection(db, 'workoutPlans'),
+          where('userId', '==', user.uid),
+          orderBy('createdAt', 'desc'),
+          limit(1)
+        );
+        const planSnap = await getDocs(qPlan);
         
-        // Select exercises for the day focus
-        const dayExercises = availableExercises
-          .filter(ex => {
-            if (dayFocus === 'Upper Body' || dayFocus === 'Push' || dayFocus === 'Pull' || dayFocus === 'Chest' || dayFocus === 'Back' || dayFocus === 'Shoulders' || dayFocus === 'Arms') {
-              return ['chest', 'back', 'shoulders', 'arms'].includes(ex.category);
-            }
-            if (dayFocus === 'Lower Body' || dayFocus === 'Legs') {
-              return ex.category === 'legs';
-            }
-            return true; // Full body
-          })
-          .slice(0, 5); // 5 exercises per day
+        if (!planSnap.empty) {
+          const planData = planSnap.docs[0].data();
+          
+          // Group exercises by day
+          const exercisesByDay = planData.exercises?.reduce((acc: any, ex: any) => {
+            const day = ex.day || 1;
+            if (!acc[day]) acc[day] = [];
+            acc[day].push(ex);
+            return acc;
+          }, {});
 
-        cycle.push({
-          day: days[i],
-          focus: dayFocus,
-          exercises: dayExercises.map(ex => ({
-            ...ex,
-            sets,
-            reps,
-            rest
-          }))
-        });
+          // Format into the cycle structure expected by the UI
+          if (exercisesByDay) {
+            const formattedCycle = Object.keys(exercisesByDay).map(dayNum => ({
+              day: `Day ${dayNum}`,
+              focus: 'Daily Workout', // Could be enhanced if focus is saved in DB
+              exercises: exercisesByDay[dayNum]
+            }));
+            setPlan(formattedCycle);
+          }
+        }
+      } catch (error) {
+        handleFirestoreError(error, OperationType.LIST, 'workoutPlans');
+      } finally {
+        setLoading(false);
       }
-
-      setPlan(cycle);
     };
 
-    generatePlan();
-  }, [userProfile]);
+    fetchActivePlan();
+  }, [user, userProfile]);
 
-  if (!userProfile) return <div className="text-center text-zinc-400 py-12">Loading profile data...</div>;
+  if (!userProfile || loading) return <div className="text-center text-zinc-400 py-12">Loading workout cycle...</div>;
+
+  const toggleDay = (index: number) => {
+    setExpandedDay(expandedDay === index ? null : index);
+  };
+
+  const startWorkout = (dayIndex: number) => {
+    // In a real app, this would set the active workout in global state and navigate to a tracking screen
+    // For now, we'll just navigate to the dashboard where the active plan is displayed
+    navigate('/');
+  };
 
   return (
     <div className="max-w-6xl mx-auto">
@@ -157,56 +128,93 @@ export const WorkoutCycles = () => {
         </div>
       )}
 
-      <div className="space-y-6">
-        {plan.map((day, index) => (
-          <motion.div 
-            key={index}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.1 }}
-            className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden"
-          >
-            <div className="p-6 border-b border-zinc-800 flex items-center justify-between bg-zinc-800/20">
-              <div>
-                <h2 className="text-xl font-bold text-white">{day.day}</h2>
-                <p className="text-zinc-400">{day.focus}</p>
-              </div>
-              <button className="flex items-center space-x-2 text-indigo-400 hover:text-indigo-300 transition-colors">
-                <span className="text-sm font-medium">Start Workout</span>
-                <ChevronRight size={18} />
-              </button>
-            </div>
-            <div className="divide-y divide-zinc-800/50">
-              {day.exercises.map((ex: any, exIndex: number) => (
-                <div key={exIndex} className="p-4 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between hover:bg-zinc-800/30 transition-colors">
-                  <div className="flex items-center space-x-4 mb-4 sm:mb-0">
-                    <div className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center text-zinc-400 shrink-0">
-                      {exIndex + 1}
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-white">{ex.name}</h3>
-                      <p className="text-sm text-zinc-500 capitalize">{ex.category.replace('_', ' ')}</p>
-                    </div>
+      <div className="space-y-4">
+        {plan.map((day, index) => {
+          const isExpanded = expandedDay === index;
+          return (
+            <motion.div 
+              key={index}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.1 }}
+              className={`bg-zinc-900 border ${isExpanded ? 'border-indigo-500/50 shadow-[0_0_15px_rgba(99,102,241,0.1)]' : 'border-zinc-800'} rounded-2xl overflow-hidden transition-all duration-300`}
+            >
+              <div 
+                onClick={() => toggleDay(index)}
+                className={`p-6 flex items-center justify-between cursor-pointer transition-colors ${isExpanded ? 'bg-indigo-900/10' : 'hover:bg-zinc-800/50'}`}
+              >
+                <div className="flex items-center space-x-4">
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-lg font-bold transition-colors ${isExpanded ? 'bg-indigo-600 text-white' : 'bg-zinc-800 text-zinc-400'}`}>
+                    D{index + 1}
                   </div>
-                  <div className="flex items-center space-x-6 text-sm">
-                    <div className="text-center">
-                      <p className="text-zinc-500 uppercase tracking-wider text-xs mb-1">Sets</p>
-                      <p className="font-bold text-white">{ex.sets}</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-zinc-500 uppercase tracking-wider text-xs mb-1">Reps</p>
-                      <p className="font-bold text-white">{ex.reps}</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-zinc-500 uppercase tracking-wider text-xs mb-1">Rest</p>
-                      <p className="font-bold text-white">{ex.rest}s</p>
-                    </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-white">{day.day}</h2>
+                    <p className={`text-sm ${isExpanded ? 'text-indigo-400' : 'text-zinc-400'}`}>{day.focus}</p>
                   </div>
                 </div>
-              ))}
-            </div>
-          </motion.div>
-        ))}
+                <div className="flex items-center space-x-4">
+                  <span className="text-sm text-zinc-500 hidden sm:inline-block">{day.exercises.length} exercises</span>
+                  <motion.div animate={{ rotate: isExpanded ? 180 : 0 }} transition={{ duration: 0.2 }}>
+                    <ChevronDown className={isExpanded ? 'text-indigo-400' : 'text-zinc-500'} />
+                  </motion.div>
+                </div>
+              </div>
+
+              <AnimatePresence>
+                {isExpanded && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.3, ease: "easeInOut" }}
+                  >
+                    <div className="border-t border-zinc-800/50 bg-zinc-950/50 p-4 sm:p-6">
+                      <div className="flex justify-between items-center mb-6">
+                        <h3 className="font-bold text-zinc-300">Workout Details</h3>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); startWorkout(index); }}
+                          className="flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors"
+                        >
+                          <Play size={16} />
+                          <span>Start Day {index + 1}</span>
+                        </button>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 gap-3">
+                        {day.exercises.map((ex: any, exIndex: number) => (
+                          <div key={exIndex} className="p-4 rounded-xl border border-zinc-800/80 bg-zinc-900 flex flex-col sm:flex-row sm:items-center justify-between hover:border-zinc-700 transition-colors">
+                            <div className="flex items-center space-x-4 mb-4 sm:mb-0">
+                              <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center text-zinc-400 shrink-0 text-sm font-medium">
+                                {exIndex + 1}
+                              </div>
+                              <div>
+                                <h4 className="font-bold text-white">{ex.name}</h4>
+                              </div>
+                            </div>
+                            <div className="flex items-center space-x-4 sm:space-x-8 text-sm bg-zinc-950/50 p-2 sm:p-3 rounded-lg sm:bg-transparent sm:p-0">
+                              <div className="text-center flex-1 sm:flex-none">
+                                <p className="text-zinc-500 uppercase tracking-wider text-[10px] mb-1">Sets</p>
+                                <p className="font-bold text-white">{ex.sets}</p>
+                              </div>
+                              <div className="text-center flex-1 sm:flex-none">
+                                <p className="text-zinc-500 uppercase tracking-wider text-[10px] mb-1">Reps</p>
+                                <p className="font-bold text-white">{ex.reps}</p>
+                              </div>
+                              <div className="text-center flex-1 sm:flex-none">
+                                <p className="text-zinc-500 uppercase tracking-wider text-[10px] mb-1">Rest</p>
+                                <p className="font-bold text-white">{ex.restSeconds || ex.rest}s</p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </motion.div>
+          );
+        })}
       </div>
     </div>
   );

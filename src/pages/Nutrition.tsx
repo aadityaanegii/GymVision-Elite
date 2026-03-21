@@ -24,7 +24,20 @@ export const Nutrition = () => {
         );
         const snapshot = await getDocs(q);
         if (!snapshot.empty) {
-          setPlan({ id: snapshot.docs[0].id, ...snapshot.docs[0].data() });
+          const nutData = snapshot.docs[0].data();
+          const today = new Date().toISOString().split('T')[0];
+          let meals = nutData.meals || [];
+          let lastUpdatedDate = nutData.lastUpdatedDate;
+          
+          if (lastUpdatedDate !== today) {
+            meals = meals.map((m: any) => ({ ...m, completed: false }));
+            await updateDoc(doc(db, 'nutritionPlans', snapshot.docs[0].id), {
+              meals,
+              lastUpdatedDate: today
+            });
+          }
+          
+          setPlan({ id: snapshot.docs[0].id, ...nutData, meals, lastUpdatedDate: today });
         }
       } catch (error) {
         handleFirestoreError(error, OperationType.LIST, 'nutritionPlans');
@@ -47,16 +60,20 @@ export const Nutrition = () => {
       
       const planData = {
         userId: user!.uid,
-        dailyCalories: newPlan.dailyCalories || 2000,
-        proteinGrams: newPlan.proteinGrams || 150,
-        carbsGrams: newPlan.carbsGrams || 200,
-        fatsGrams: newPlan.fatsGrams || 70,
+        dailyCalories: Number(newPlan.dailyCalories) || 2000,
+        proteinGrams: Number(newPlan.proteinGrams) || 150,
+        carbsGrams: Number(newPlan.carbsGrams) || 200,
+        fatsGrams: Number(newPlan.fatsGrams) || 70,
         meals: (newPlan.meals || []).map((meal: any) => ({
           name: meal.name || 'Meal',
           description: meal.description || 'Healthy meal',
-          calories: meal.calories || 500,
+          calories: Number(meal.calories) || 500,
+          protein: Number(meal.protein) || 30,
+          carbs: Number(meal.carbs) || 40,
+          fats: Number(meal.fats) || 15,
           completed: false
         })),
+        lastUpdatedDate: new Date().toISOString().split('T')[0],
         createdAt: serverTimestamp()
       };
 
@@ -80,8 +97,12 @@ export const Nutrition = () => {
     updated[index].completed = !updated[index].completed;
     
     try {
-      await updateDoc(doc(db, 'nutritionPlans', plan.id), { meals: updated });
-      setPlan({ ...plan, meals: updated });
+      const today = new Date().toISOString().split('T')[0];
+      await updateDoc(doc(db, 'nutritionPlans', plan.id), { 
+        meals: updated,
+        lastUpdatedDate: today
+      });
+      setPlan({ ...plan, meals: updated, lastUpdatedDate: today });
       if (updated[index].completed) {
         alert(`Meal logged: ${updated[index].name}! 🥗`);
       }
@@ -118,10 +139,34 @@ export const Nutrition = () => {
       ) : plan ? (
         <div className="space-y-6">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <MacroCard label="Daily Calories" value={plan.dailyCalories} unit="kcal" color="text-orange-500" />
-            <MacroCard label="Protein" value={plan.proteinGrams} unit="g" color="text-red-500" />
-            <MacroCard label="Carbs" value={plan.carbsGrams} unit="g" color="text-blue-500" />
-            <MacroCard label="Fats" value={plan.fatsGrams} unit="g" color="text-yellow-500" />
+            <MacroCard 
+              label="Calories" 
+              value={plan.meals?.filter((m: any) => m.completed).reduce((acc: number, m: any) => acc + (m.calories || 0), 0)} 
+              target={plan.dailyCalories} 
+              unit="kcal" 
+              color="text-orange-500" 
+            />
+            <MacroCard 
+              label="Protein" 
+              value={plan.meals?.filter((m: any) => m.completed).reduce((acc: number, m: any) => acc + (m.protein || 0), 0)} 
+              target={plan.proteinGrams} 
+              unit="g" 
+              color="text-red-500" 
+            />
+            <MacroCard 
+              label="Carbs" 
+              value={plan.meals?.filter((m: any) => m.completed).reduce((acc: number, m: any) => acc + (m.carbs || 0), 0)} 
+              target={plan.carbsGrams} 
+              unit="g" 
+              color="text-blue-500" 
+            />
+            <MacroCard 
+              label="Fats" 
+              value={plan.meals?.filter((m: any) => m.completed).reduce((acc: number, m: any) => acc + (m.fats || 0), 0)} 
+              target={plan.fatsGrams} 
+              unit="g" 
+              color="text-yellow-500" 
+            />
           </div>
 
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
@@ -143,6 +188,7 @@ export const Nutrition = () => {
                     <div>
                       <h3 className={`font-bold text-lg ${meal.completed ? 'text-emerald-400 line-through opacity-70' : 'text-zinc-100'}`}>{meal.name}</h3>
                       <p className="text-zinc-400 text-sm mt-1">{meal.description}</p>
+                      <p className="text-zinc-500 text-xs mt-1">{meal.protein || 0}g P • {meal.carbs || 0}g C • {meal.fats || 0}g F</p>
                     </div>
                   </div>
                   <div className="text-right shrink-0 ml-4">
@@ -174,11 +220,11 @@ export const Nutrition = () => {
   );
 };
 
-const MacroCard = ({ label, value, unit, color }: any) => (
+const MacroCard = ({ label, value, target, unit, color }: any) => (
   <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 text-center">
     <p className="text-zinc-400 uppercase tracking-wider text-xs font-medium mb-2">{label}</p>
     <p className={`text-3xl font-bold font-mono ${color}`}>
-      {value} <span className="text-sm font-normal text-zinc-500">{unit}</span>
+      {value} <span className="text-sm font-normal text-zinc-500">/ {target}{unit}</span>
     </p>
   </div>
 );
