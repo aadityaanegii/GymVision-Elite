@@ -1,48 +1,123 @@
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import {
+  User,
+  onAuthStateChanged,
+  signInWithPopup,
+  signOut,
+  setPersistence,
+  browserLocalPersistence
+} from 'firebase/auth';
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { auth, db, googleProvider, handleFirestoreError, OperationType } from '../firebase';
+import { UserProfile } from '../types';
 
-interface Props {
-  children?: ReactNode;
+interface AuthContextType {
+  user: User | null;
+  userProfile: UserProfile | null;
+  loading: boolean;
+  signInWithGoogle: () => Promise<void>;
+  logout: () => Promise<void>;
+  refreshProfile: () => Promise<void>;
 }
 
-interface State {
-  hasError: boolean;
-  error: Error | null;
-}
+const AuthContext = createContext<AuthContextType | null>(null);
 
-export class ErrorBoundary extends Component<Props, State> {
-  public state: State = {
-    hasError: false,
-    error: null
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [user, setUser] = useState<User | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // 🔥 Fetch or create user profile
+  const fetchProfile = async (currentUser: User) => {
+    try {
+      const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+
+      if (userDoc.exists()) {
+        setUserProfile(userDoc.data() as UserProfile);
+      } else {
+        const newProfile: Partial<UserProfile> = {
+          uid: currentUser.uid,
+          email: currentUser.email || '',
+          role: 'user',
+          onboardingCompleted: false,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+          displayName: currentUser.displayName || '',
+          photoURL: currentUser.photoURL || ''
+        };
+
+        await setDoc(doc(db, 'users', currentUser.uid), newProfile);
+        setUserProfile(newProfile as UserProfile);
+      }
+    } catch (error) {
+      console.error("Auth initialization error:", error);
+      try {
+        handleFirestoreError(error, OperationType.GET, `users/${currentUser.uid}`);
+      } catch {}
+    }
   };
 
-  public static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error };
-  }
+  // 🔥 Auth state listener
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      setUser(currentUser);
 
-  public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('Uncaught error:', error, errorInfo);
-  }
+      if (currentUser) {
+        await fetchProfile(currentUser);
+      } else {
+        setUserProfile(null);
+      }
 
-  public render() {
-    if (this.state.hasError) {
-      return (
-        <div className="min-h-screen flex items-center justify-center bg-zinc-950 text-white p-4">
-          <div className="max-w-md w-full bg-zinc-900 rounded-xl p-6 border border-zinc-800">
-            <h2 className="text-xl font-bold text-red-500 mb-4">Something went wrong</h2>
-            <div className="bg-zinc-950 p-4 rounded-lg overflow-auto max-h-64 text-sm font-mono text-zinc-300">
-              {this.state.error?.message}
-            </div>
-            <button
-              className="mt-6 w-full py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg font-medium transition-colors"
-              onClick={() => window.location.reload()}
-            >
-              Reload Application
-            </button>
-          </div>
-        </div>
-      );
+      setLoading(false); // ✅ Always stop loading
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // 🔄 Refresh profile manually
+  const refreshProfile = async () => {
+    if (user) {
+      await fetchProfile(user);
     }
+  };
 
-    return this.props.children;
-  }
-}
+  // 🔐 Google Sign-In (WITH persistence)
+  const signInWithGoogle = async () => {
+    try {
+      await setPersistence(auth, browserLocalPersistence); // ✅ Keeps user logged in
+      await signInWithPopup(auth, googleProvider);
+    } catch (error) {
+      console.error("Error signing in with Google", error);
+      throw error;
+    }
+  };
+
+  // 🚪 Logout
+  const logout = async () => {
+    await signOut(auth);
+    setUser(null);
+    setUserProfile(null);
+  };
+
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        userProfile,
+        loading,
+        signInWithGoogle,
+        logout,
+        refreshProfile
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+// 🔥 Hook
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) throw new Error('useAuth must be used within an AuthProvider');
+  return context;
+};
